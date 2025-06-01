@@ -212,9 +212,29 @@ class Connect4JFrame extends JFrame implements ActionListener {
                 check4(g);
         } // paint
  
+        // Add this helper to handle random agent moves after each turn
+        private void maybePlayRandomAgent() {
+                // If game ended, do nothing
+                if (end) return;
+
+                // If it's red's turn and red is random, play
+                if (activeColour == RED && redIsRandom) {
+                        int col = getRandomMove() + 1; // putDisk expects 1-based column
+                        putDisk(col);
+                        // No move count increment here!
+                        SwingUtilities.invokeLater(() -> maybePlayRandomAgent());
+                }
+                // If it's yellow's turn and yellow is random, play
+                else if (activeColour == YELLOW && yellowIsRandom) {
+                        int col = getRandomMove() + 1;
+                        putDisk(col);
+                        // No move count increment here!
+                        SwingUtilities.invokeLater(() -> maybePlayRandomAgent());
+                }
+        }
+
+        // Update putDisk to increment move counts
         public void putDisk(int n) {
-        // put a disk on top of column n
-                // if game is won, do nothing
                 if (end) return;
                 gameStart=true;
                 int row;
@@ -223,10 +243,15 @@ class Connect4JFrame extends JFrame implements ActionListener {
                         if (theArray[row][n]>0) break;
                 if (row>0) {
                         theArray[--row][n]=activeColour;
-                        if (activeColour==RED)
+                        if (activeColour==RED) {
+                                redMoveCount++;
                                 activeColour=YELLOW;
-                        else
+                        } else {
+                                yellowMoveCount++;
                                 activeColour=RED;
+                        }
+                        totalMoveCount++;
+                        updateCount();
                         repaint();
                 }
         }
@@ -314,37 +339,18 @@ class Connect4JFrame extends JFrame implements ActionListener {
                         end=false;
                         initialize();
                         repaint();
+                        // After new game, if starting player is random, let them play
+                        SwingUtilities.invokeLater(() -> maybePlayRandomAgent());
+                        return;
                 } else if (e.getSource() == exitMI) {
                         System.exit(0);
                 } else if (e.getSource() == redMI) {
-                        // don't change colour to play in middle of game
                         if (!gameStart) activeColour=RED;
                 } else if (e.getSource() == yellowMI) {
                         if (!gameStart) activeColour=YELLOW;
                 }
-                int col;
-                if (!end && gameStart) {
-                        // Increment the move counter for the active player
-                        if (activeColour == RED) {
-                                if (redIsRandom) {
-                                        col = getRandomMove();
-                                        // Simulate the random move by selecting column
-                                        putDisk(col);
-                                }
-                                yellowMoveCount++;
-                        } else if (activeColour == YELLOW) {
-                                if (yellowIsRandom) {
-                                        col = getRandomMove();
-                                        // Simulate the random move by selecting column
-                                        putDisk(col);
-                                }
-                                redMoveCount++;
-                        }
-                        totalMoveCount++;
-
-                        // Update the label with the new move counts
-                        updateCount();
-                }
+                // After any human move, let random agent play if needed
+                SwingUtilities.invokeLater(() -> maybePlayRandomAgent());
         } // end ActionPerformed
  
 } // class
