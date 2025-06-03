@@ -68,11 +68,14 @@ class Connect4JFrame extends JFrame implements ActionListener {
     JLabel moveCountLabel;
     JLabel moveTimeLabel;
     JLabel scoreMinMaxLabel;
+    JLabel botColMoveLabel;
 
     public Connect4JFrame() {
         moveCountLabel = new JLabel("Red: 0 moves | Yellow: 0 moves | Total: 0 moves");
         moveTimeLabel = new JLabel("| Last move time: 0 ms |");
         scoreMinMaxLabel = new JLabel("Evaluation score of minmax: 0");
+        // which column the bot is picking-test to prevent bugs
+        botColMoveLabel = new JLabel("Bot selected column: -");
         setTitle("Connect4 by Chris Clarke");
         MenuBar mbar = new MenuBar();
         Menu fileMenu = new Menu("File");
@@ -207,6 +210,7 @@ class Connect4JFrame extends JFrame implements ActionListener {
         panel2.add(moveCountLabel);
         panel2.add(moveTimeLabel);
         panel2.add(scoreMinMaxLabel);
+        panel2.add(botColMoveLabel);
         add(panel, BorderLayout.NORTH);
         add(panel2, BorderLayout.SOUTH);
         initialize();
@@ -263,10 +267,18 @@ class Connect4JFrame extends JFrame implements ActionListener {
         }
 
         if (col != -1) {
+            botColMoveLabel.setText("Bot selected column: " + (col+1));
+            botColMoveLabel.setForeground(Color.BLACK);
             putDisk(col + 1);
             long endTime = System.currentTimeMillis();
             moveTimeLabel.setText("Last move time: " + (endTime - startTime) + " ms");
             SwingUtilities.invokeLater(() -> helperPlayAgent());
+        } else if ((redIsMinimax && activeColour == RED) || (yellowIsMinimax && activeColour == YELLOW) ||
+            (redIsRandom && activeColour == RED) || (yellowIsRandom && activeColour == YELLOW)) {
+            // show incorect working of the agent if it's the bot turn
+            botColMoveLabel.setText("Bot selected column: -1 (ERR!)");
+            // it failed to select a move
+            botColMoveLabel.setForeground(Color.RED);
         }
     }
 
@@ -301,8 +313,11 @@ class Connect4JFrame extends JFrame implements ActionListener {
         g.setFont(new Font("Courier", Font.BOLD, 100));
         if (n == RED)
             g.drawString("Red wins!", 100, 400);
-        else
+        else if (n == YELLOW)
             g.drawString("Yellow wins!", 100, 400);
+        // draw event add
+        else
+            g.drawString("Draw!", 100, 400);
         end = true;
     }
 
@@ -351,6 +366,20 @@ class Connect4JFrame extends JFrame implements ActionListener {
                         && curr == theArray[row - 2][col + 2]
                         && curr == theArray[row - 3][col + 3])
                     displayWinner(g, theArray[row][col]);
+            }
+        }
+        // check if there is a draw, call draw event
+        if (!end) {
+            boolean full = true;
+            for (int col = 0; col < MAXCOL; col++) {
+                if (theArray[0][col] == BLANK) {
+                    full = false;
+                    break;
+                }
+            }
+            if (full) {
+                // call draw event
+                displayWinner(g, 0);
             }
         }
     }
@@ -409,17 +438,21 @@ class Connect4JFrame extends JFrame implements ActionListener {
         int bestCol = -1; // invalid move, should be updated
         // go through all the columns | of the matrix and score them
         for (int col = 0; col < MAXCOL; col++) {
-            if (!isValidMove(col))
+            if (!isValidMove(col)) {
+                System.out.println("[DEBUG] Column " + col + " is not valid for player " + player);
                 continue;
+            }
             int[][] copy = copyArray(theArray);
             makeMove(copy, col, player);
             int score = minimax(copy, depth - 1, false, player, player == RED ? YELLOW : RED);
+            System.out.println("[DEBUG] Player " + player + " considering col " + col + " with score " + score);
             // update scoring if better then the previous
             if (score > bestScore) {
                 bestScore = score;
                 bestCol = col;
             }
         }
+        System.out.println("[DEBUG] Player " + player + " bestCol: " + bestCol + " bestScore: " + bestScore);
         return bestCol;
     }
 
@@ -427,9 +460,9 @@ class Connect4JFrame extends JFrame implements ActionListener {
         int winner = checkWinner(board);
         // ends the game if winner is selected
         if (winner == agent)
-            return Integer.MAX_VALUE; // absolute best
+            return Integer.MAX_VALUE-1; // absolute best, but -1 to actualy select the col
         if (winner == opponent)
-            return Integer.MIN_VALUE; // absolute worst
+            return Integer.MIN_VALUE+1; // absolute worst, but +1 to actualy select the col
         if (isBoardFull(board) || depth == 0)
             return evaluateBoard(board, agent);
 
@@ -467,8 +500,8 @@ class Connect4JFrame extends JFrame implements ActionListener {
         int opponent = (player == RED) ? YELLOW : RED;
         score += countStreaks(board, player, 2) * 10;
         score += countStreaks(board, player, 3) * 100;
-        score -= countStreaks(board, opponent, 2) * 12;
-        score -= countStreaks(board, opponent, 3) * 120;
+        score -= countStreaks(board, opponent, 2) * 10;
+        score -= countStreaks(board, opponent, 3) * 100;
         return score;
     }
 
