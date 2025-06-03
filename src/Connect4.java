@@ -42,6 +42,8 @@ class Connect4JFrame extends JFrame implements ActionListener {
     boolean yellowIsRandom = false;
     boolean redIsMinimax = false;
     boolean yellowIsMinimax = false;
+    boolean redIsAlphaBeta = false;
+    boolean yellowIsAlphaBeta = false;
 
     // random agent selects a random column
     private int getRandomMove() {
@@ -99,10 +101,13 @@ class Connect4JFrame extends JFrame implements ActionListener {
         Menu playersMenu = new Menu("Players");
         CheckboxMenuItem humanRed = new CheckboxMenuItem("Red: Human", true);
         CheckboxMenuItem randomRed = new CheckboxMenuItem("Red: Random", false);
+        CheckboxMenuItem minimaxRed = new CheckboxMenuItem("Red: Minimax", false);
+        CheckboxMenuItem alphaBetaRed = new CheckboxMenuItem("Red: AlphaBeta", false);
         CheckboxMenuItem humanYellow = new CheckboxMenuItem("Yellow: Human", true);
         CheckboxMenuItem randomYellow = new CheckboxMenuItem("Yellow: Random", false);
-        CheckboxMenuItem minimaxRed = new CheckboxMenuItem("Red: Minimax", false);
         CheckboxMenuItem minimaxYellow = new CheckboxMenuItem("Yellow: Minimax", false);
+        CheckboxMenuItem alphaBetaYellow = new CheckboxMenuItem("Yellow: AlphaBeta", false);
+
 
         humanRed.addItemListener(e -> {
             redIsMinimax = false;
@@ -142,6 +147,7 @@ class Connect4JFrame extends JFrame implements ActionListener {
             humanRed.setState(false);
             randomRed.setState(false);
             minimaxRed.setState(true);
+            alphaBetaRed.setState(false);
         });
 
         minimaxYellow.addItemListener(e -> {
@@ -150,15 +156,38 @@ class Connect4JFrame extends JFrame implements ActionListener {
             humanYellow.setState(false);
             randomYellow.setState(false);
             minimaxYellow.setState(true);
+            alphaBetaYellow.setState(false);
+        });
+
+        alphaBetaRed.addItemListener(e -> {
+            redIsAlphaBeta = true;
+            redIsMinimax = false;
+            redIsRandom = false;
+            humanRed.setState(false);
+            randomRed.setState(false);
+            minimaxRed.setState(false);
+            alphaBetaRed.setState(true);
+        });
+    
+        alphaBetaYellow.addItemListener(e -> {
+            yellowIsAlphaBeta = true;
+            yellowIsMinimax = false;
+            yellowIsRandom = false;
+            humanYellow.setState(false);
+            randomYellow.setState(false);
+            minimaxYellow.setState(false);
+            alphaBetaYellow.setState(true);
         });
 
         // add selection menu items
         playersMenu.add(humanRed);
         playersMenu.add(randomRed);
         playersMenu.add(minimaxRed);
+        playersMenu.add(alphaBetaRed);
         playersMenu.add(humanYellow);
         playersMenu.add(randomYellow);
         playersMenu.add(minimaxYellow);
+        playersMenu.add(alphaBetaYellow);
         mbar.add(playersMenu);
 
         setMenuBar(mbar);
@@ -265,6 +294,13 @@ class Connect4JFrame extends JFrame implements ActionListener {
         } else if (activeColour == YELLOW && yellowIsRandom) {
             col = getRandomMove();
         }
+        else if (activeColour == RED && redIsAlphaBeta) {
+            col = getAlphaBetaMove(RED, 7); // is much faster then vanila minimax 
+        } else if (activeColour == YELLOW && yellowIsAlphaBeta) {
+            col = getAlphaBetaMove(YELLOW, 8);  // d=10 takes 10sec on the start to make a move
+                                                      // d=9 is more playable with harder agent
+                                                      // d=8 is the same speed as vanila minimax d=7
+        }
 
         if (col != -1) {
             botColMoveLabel.setText("Bot selected column: " + (col+1));
@@ -274,7 +310,8 @@ class Connect4JFrame extends JFrame implements ActionListener {
             moveTimeLabel.setText("Last move time: " + (endTime - startTime) + " ms");
             SwingUtilities.invokeLater(() -> helperPlayAgent());
         } else if ((redIsMinimax && activeColour == RED) || (yellowIsMinimax && activeColour == YELLOW) ||
-            (redIsRandom && activeColour == RED) || (yellowIsRandom && activeColour == YELLOW)) {
+        (redIsRandom && activeColour == RED) || (yellowIsRandom && activeColour == YELLOW) ||
+        (redIsAlphaBeta && activeColour == RED) || (yellowIsAlphaBeta && activeColour == YELLOW)) {
             // show incorect working of the agent if it's the bot turn
             botColMoveLabel.setText("Bot selected column: -1 (ERR!)");
             // it failed to select a move
@@ -488,6 +525,70 @@ class Connect4JFrame extends JFrame implements ActionListener {
                 int eval = minimax(copy, depth - 1, true, agent, opponent);
                 // take min if minimizing
                 minEval = Math.min(minEval, eval);
+            }
+            return minEval;
+        }
+    }
+
+    //------------alphabeta----------------
+    // same funciton as the minimax, but with passing alpha and beta params into alphaBeta()
+    private int getAlphaBetaMove(int player, int depth) {
+        int bestScore = Integer.MIN_VALUE;
+        int bestCol = -1;
+        for (int col = 0; col < MAXCOL; col++) {
+            if (!isValidMove(col)) {
+                System.out.println("[DEBUG] Column " + col + " is not valid for player " + player);
+                continue;
+            }
+            int[][] copy = copyArray(theArray);
+            makeMove(copy, col, player);
+            int score = alphaBeta(copy, depth - 1, Integer.MIN_VALUE, Integer.MAX_VALUE, false, player, player == RED ? YELLOW : RED);
+            System.out.println("[DEBUG] Player " + player + " considering col " + col + " with score " + score);
+            if (score > bestScore) {
+                bestScore = score;
+                bestCol = col;
+            }
+        }
+        System.out.println("[DEBUG] Player " + player + " bestCol: " + bestCol + " bestScore: " + bestScore);
+        return bestCol;
+    }
+    
+    private int alphaBeta(int[][] board, int depth, int alpha, int beta, boolean maximizing, int agent, int opponent) {
+        // same function as minimax
+        int winner = checkWinner(board);
+        if (winner == agent)
+            return Integer.MAX_VALUE-1;
+        if (winner == opponent)
+            return Integer.MIN_VALUE+1;
+        if (isBoardFull(board) || depth == 0)
+            return evaluateBoard(board, agent);
+    
+        if (maximizing) {
+            int maxEval = Integer.MIN_VALUE;
+            for (int col = 0; col < MAXCOL; col++) {
+                if (!isValidMove(board, col)) 
+                    continue;
+                int[][] copy = copyArray(board);
+                makeMove(copy, col, agent);
+                int eval = alphaBeta(copy, depth - 1, alpha, beta, false, agent, opponent);
+                // when alpha-beta prunning, alpha>beta, as otherwise we are searching through non important branches of the tree
+                maxEval = Math.max(maxEval, eval);
+                alpha = Math.max(alpha, eval);
+                if (beta <= alpha)
+                    break;
+            }
+            return maxEval;
+        } else {
+            int minEval = Integer.MAX_VALUE;
+            for (int col = 0; col < MAXCOL; col++) {
+                if (!isValidMove(board, col)) continue;
+                int[][] copy = copyArray(board);
+                makeMove(copy, col, opponent);
+                int eval = alphaBeta(copy, depth - 1, alpha, beta, true, agent, opponent);
+                minEval = Math.min(minEval, eval);
+                beta = Math.min(beta, eval);
+                if (beta <= alpha)
+                    break;
             }
             return minEval;
         }
